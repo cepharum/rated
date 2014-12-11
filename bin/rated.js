@@ -52,8 +52,9 @@ domain.on( "error", function( error ) {
 } );
 
 domain.run( function() {
-	var tracking = TRACKING.createTrackingList( blocking ),
-	    pattern  = CONFIG.ipExtractor || /^((?:\d+\.){3}\d+)(?:\s|\?|$)/,
+	var tracking   = TRACKING.createTrackingList( blocking ),
+	    ipPattern  = CONFIG.ipExtractor || /^((?:\d+\.){3}\d+)(?:\s|\?|$)/,
+	    urlPattern = CONFIG.urlExtractor instanceof RegExp ? CONFIG.urlExtractor : false,
 	    receiver;
 
 	switch ( process.argv[2] ) {
@@ -70,11 +71,29 @@ domain.run( function() {
 
 	function extractFromMessage( msg ) {
 		var text   = msg.toString( "utf8", 0, 2048 ),
-		    parsed = pattern.exec( text );
+		    ip     = null,
+		    url    = null,
+			parsed;
 
+		parsed = ipPattern.exec( text );
 		if ( parsed ) {
-			tracking.capture( parsed[1] );
+			ip = parsed[1];
+		} else {
+			console.error( "failed to extract IP from notification: " + text );
+			return;
 		}
+
+		if ( urlPattern ) {
+			parsed = urlPattern.exec( text );
+			if ( parsed ) {
+				url = parsed[1];
+			} else {
+				console.error( "failed to extract request URL from notification: " + text );
+				return;
+			}
+		}
+
+		tracking.capture( ip, url );
 	}
 } );
 

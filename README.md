@@ -40,11 +40,16 @@ Using `rated` a web server can locally reduce effects of incoming DDoS attacks.
 2. By utilizing netfilter it is possible to prevent your server from responding 
    to attacking servers on each and every request resulting in useless outgoing 
    traffic.
+3. `rated` is implemented in a scripting language (JavaScript) enabling skilled
+   administrators to instantly react on new kinds of attacks by tweaking the
+   quite clear code of `rated` accordingly.
 
 ### Disadvantages
 
-1. The memory footprint of running NodeJS is anything but small.
-2. This tool isn't eventually protecting a server against DDoS attacks. 
+1. The memory footprint of running NodeJS is anything but small. 
+   *TODO Consider switching to less expensive implementation. (python?) */
+2. This tool isn't eventually protecting a server against all kinds of DDoS 
+   attacks. 
 
 ## Installation
 

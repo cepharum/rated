@@ -9,5 +9,10 @@ else
 	WRAPPER=sudo
 fi
 
-$WRAPPER iptables -C INPUT -p tcp -s "${1}" --dport 80 -j DROP &>/dev/null && \
-	$WRAPPER iptables -D INPUT -p tcp -s "${1}" --dport 80 -j DROP
+# $WRAPPER mkdir -p /var/log/rated
+
+$WRAPPER iptables -C INPUT -s "${1}" -j DROP &>/dev/null && \
+	$WRAPPER iptables -D INPUT -s "${1}" -j DROP # 2>&1 | tee /var/log/rated/input.error.log
+
+$WRAPPER iptables -C OUTPUT -d "${1}" -j REJECT &>/dev/null && \
+	$WRAPPER iptables -D OUTPUT -d "${1}" -j REJECT # 2>&1 | tee /var/log/rated/output.error.log
