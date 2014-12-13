@@ -70,11 +70,270 @@ This tool is free of external dependencies, but comes without daemonizing
 support, thus must be managed by some supervisor like `Upstart`, `daemontools`
 or `runit`.
 
-*TODO: Add some installation instructions*
+This tutorial has been tested under Debian Wheezy.
+
+### NodeJS
+
+NodeJS is required for running `rated`. In case of Debian Wheezy there is no 
+immediate opportunity for installing using aptitude or apt-get. Please check
+the [instructions](https://github.com/joyent/node/wiki/Installing-Node.js-via-package-manager) 
+provided by [Joyent](http://www.joyent.com/), the company providing NodeJS.
+
+### rated
+
+#### Download ZIP
+ 
+1. Download [snapshot](https://github.com/cepharum/rated/archive/master.zip).
+   ```
+   cd /home/johndoe
+   wget https://github.com/cepharum/rated/archive/master.zip
+   ```
+2. Unzip it to some folder of your choice, e.g `/home/johndoe/rated`.
+   ```
+   unzip master.zip
+   mv rated-master rated
+   ```
+   This would result in script being available as `/home/johndoe/rated/bin/rated.js`.
+
+#### Clone Repository
+
+By cloning repository you might use the power of git to keep your installation
+uptodate with upcoming snapshots.
+
+1. Install `git`
+   ```
+   apt-get install git
+   ```
+2. Clone repository
+   ```
+   git clone https://github.com/cepharum/rated
+   ```
+   This would result in script being available as `/home/johndoe/rated/bin/rated.js`.
+
+#### Adjust Configuration
+
+`rated` is configured in file `/home/johndoe/rated/etc/config.js`. Check this
+file for adjusting configuration of `rated`.
+
+### Install Service Manager
+
+`rated` is a generic script missing support for running as a daemon. This isn't
+bad practice actually for monitoring services using some supervising service is
+preferred e.g. for instantly restarting the monitored service in case of it's
+crashing.
+
+Debian Wheezy includes `runit` while Ubuntu is still serving `upstart`.
+
+#### runit
+
+1. Install `runit`
+   ```
+   apt-get install runit
+   ```
+2. Create service context
+   ```
+   mkdir -p /etc/sv/rated/log/main
+   echo >/etc/sv/rated/run <<<EOT
+   #!/bin/sh
+   exec /usr/local/bin/node /home/johndoe/rated/bin/rated.js http
+   EOT
+   echo >/etc/sv/rated/log/run <<<EOT
+   #!/bin/sh
+   exec chpst -ulog svlogd -tt ./main
+   EOT
+   ```
+   You might need to tweak pathnames to NodeJS binary and to rated.js according
+   to your setup. In this example `rated` is running with `http` notifications 
+   receiver.
+3. Enable this service
+   ```
+   cd /etc/service
+   ln -s ../sv/rated rated
+   ```
+   This is enabling and instantly starting `rated` within seconds.
+4. Control the service
+   - The service is kept running basically.
+   - It's logging into file /etc/sv/rated/log/main/current. Log files are 
+     rotated automatically.
+   - You might check, start, stop and restart `rated` using these commands:
+     ```
+     sv stop rated
+     sv start rated
+     sv restart rated
+     svn status rated
+     ```
+
+### Integrate with your "Requests Processor"
+
+Basically `rated` receives notifications for remote IP addresses of currently
+incoming requests. It doesn't care for whether those requests are addressing some
+website, some mail service or any other kind of service. The term "request processor"
+is thus referring to some software on your server that is usually processing the
+request to be observed by rated. This might even refer to a whole bunch of software.
+
+In our case there is [nginx](http://nginx.org) providing access on a website to 
+protect. For integrating nginx we take a website's existing configuration and
+wrap it in nesting `location` rule. Consider this example for providing some
+PHP-based website including some externally defined rules:
+
+```
+location ~ ^/.+\.php(/|$) {
+   fastcgi_pass unix:/var/run/php5-fpm.sock;
+   fastcgi_index index.php;
+   fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+   include fastcgi_params;
+}
+
+include php-rules;
+
+location = / {
+   index index.php index.html;
+}
+```
+
+Wrap this whole configuration in following template declaring some internal 
+post_action performed on every request to this site:
+
+```
+location / {
+   # report all processed requests to some upstream service
+   post_action @rated;
+
+   # disable keep-alive
+   #keepalive_timeout 0;
+   
+   # replace this comment by your existing configuration
+}
+
+location @rated {
+   internal;
+   proxy_pass http://127.0.0.1:8080;
+   proxy_pass_request_body off;
+   proxy_pass_request_headers off;
+   proxy_set_header X-IP $remote_addr;
+
+   keepalive_timeout 60;
+}
+```
+
+The result should look like this:
+
+```
+location / {
+   # report all processed requests to some upstream service
+   post_action @rated;
+
+   # disable keep-alive
+   #keepalive_timeout 0;
+   
+   location ~ ^/.+\.php(/|$) {
+      fastcgi_pass unix:/var/run/php5-fpm.sock;
+      fastcgi_index index.php;
+      fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+      include fastcgi_params;
+   }
+
+   include php-rules;
+   
+   location = / {
+      index index.php index.html;
+   }
+}
+
+location @rated {
+   internal;
+   proxy_pass http://127.0.0.1:8080;
+   proxy_pass_request_body off;
+   proxy_pass_request_headers off;
+   proxy_set_header X-IP $remote_addr;
+   
+   keepalive_timeout 60;
+}
+```
+
+#### Fine-Tuning nginx
+
+In case of nginx you might check the following advises for improving the site's
+resistance:
+
+##### Disable Keep-alive
+
+Clients passing firewall might try to keep connections to your nginx trying to
+exhaust your server's number of available TCP sockets. nginx might be configured
+to ignore requests for keeping connections alive by uncommenting that 
+`keepalive_timeout` rule given in example above.
+
+##### Enabling FastCGI Caching
+
+In case of running PHP-based website (or any other kind of FastCGI-based software)
+you might enable FastCGI caching support of nginx.
+
+Add the following rule in context of your configuration's `http` block 
+(e.g. in /etc/nginx/nginx.conf):
+
+```
+http {
+   ...
+   fastcgi_cache_path /var/spool/nginx/fastcgi levels=1:2 keys_zone=myzone:10m;
+   ...
+}
+```
+
+This is declaring a caching control zone named `myzone` you might use now by 
+inserting the following rule in context of a `server` block like this:
+
+```
+server [
+   ...
+   fastcgi_cache myzone;
+   ...
+}
+```
+
+##### Enabling Request Rate Limiter
+
+Another option is to have nginx stop passing requests to quite expensively 
+processing PHP interpreter by enabling some request rate limiter. This works 
+similar to FastCGI caching in that you globally enable some key pool in your 
+setup's `http` block:
+
+```
+http {
+   ...
+   limit_req_zone $binary_remote_addr zone=perip:10m rate=60r/m;
+   ...
+}
+```
+
+This is defining some pool named `perip` for managing rate limiting of requests.
+It is capable of managing more than 1.5 million requests.
+
+Adding the followeing rule in your website's `server` block is eventually 
+enabling rate limiter for that site:
+
+```
+server {
+   ...
+   limit_req zone=perip burst=10 nodelay;
+   ...
+}
+```
+
+`nodelay` is enabled for instantly rejecting processes exceedig defined rate
+limit. Otherwise requests might be delayed as much as required to keep requests
+in defined rate limit. However this is increasingly consuming TCP sockets when
+under attack. By using `nodelay` even wanted visitors might encounter trouble
+with fetching your site, thus rate limit is declared in requests per minute 
+rather than requests per seconds (for wanted visitors might quickly fetch an
+HTML document and all related asset files like CSS, image, Javascript, etc.).
 
 ## Inspecting Status
 
 ### Count Blocked Packets
+
+The following commands might be used for inspecting status of firewall.
+
+> Commands consider all rules in table INPUT being set by `rated`.
 
 ```
 iptables -nvL INPUT | awk 'BEGIN {s=0} NR>2 {s+=(substr($1,length($1))=="K")?substr($1,1,length($1))*1024:$1} END {print s}'
