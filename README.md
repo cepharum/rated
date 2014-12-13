@@ -58,8 +58,10 @@ Using `rated` a web server can locally reduce effects of incoming DDoS attacks.
 
 ### Disadvantages
 
-1. The memory footprint of running NodeJS is anything but small. 
-   *TODO Consider switching to less expensive implementation. (python?) */
+1. The memory footprint of running NodeJS is anything but small. In opposition
+   to other engines NodeJS is performing very well using single thread. Its
+   memory consumption isn't heavily increasing under high load. Load on CPU is
+   kept little as well for using event-driven operations.
 2. This tool isn't eventually protecting a server against all kinds of DDoS 
    attacks. It's always required to keep an eye on your server and to monitor
    this service's quality in your particular situation.
