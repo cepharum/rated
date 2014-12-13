@@ -186,7 +186,7 @@ Basically `rated` receives notifications for remote IP addresses of currently
 incoming requests. It doesn't care for whether those requests are addressing some
 website, some mail service or any other kind of service. The term "request processor"
 is thus referring to some software on your server that is usually processing the
-request to be observed by rated. This might even refer to a whole bunch of software.
+request to be observed by `rated`. This might even refer to a whole bunch of software.
 
 In our case there is [nginx](http://nginx.org) providing access on a website to 
 protect. For integrating nginx we take a website's existing configuration and
@@ -309,8 +309,8 @@ server [
 
 ##### Enabling Request Rate Limiter
 
-Another option is to have nginx stop passing requests to quite expensively 
-processing PHP interpreter by enabling some request rate limiter. This works 
+Another option to keep nginx from passing requests to quite expensively 
+processing PHP interpreter is enabling some request rate limiter. This works 
 similar to FastCGI caching in that you globally enable some key pool in your 
 setup's `http` block:
 
@@ -325,7 +325,7 @@ http {
 This is defining some pool named `perip` for managing rate limiting of requests.
 It is capable of managing more than 1.5 million requests.
 
-Adding the followeing rule in your website's `server` block is eventually 
+Adding the following rule in your website's `server` block is eventually 
 enabling rate limiter for that site:
 
 ```
@@ -337,14 +337,84 @@ server {
 ```
 
 `nodelay` is enabled for instantly rejecting processes exceedig defined rate
-limit. Otherwise requests might be delayed as much as required to keep requests
+limit. Otherwise requests are delayed as much as required to keep requests
 in defined rate limit. However this is increasingly consuming TCP sockets when
-under attack. By using `nodelay` even wanted visitors might encounter trouble
-with fetching your site, thus rate limit is declared in requests per minute 
-rather than requests per seconds (for wanted visitors might quickly fetch an
-HTML document and all related asset files like CSS, image, Javascript, etc.).
+under attack. 
+
+By using `nodelay` even wanted visitors might encounter trouble with fetching 
+your site, thus rate limit is declared in requests per minute rather than 
+requests per seconds (for wanted visitors might quickly fetch an HTML document 
+and all related asset files like CSS, image, Javascript, etc.).
+
+## Fine-Tuning Operating System
+
+### sysctl
+
+1. Try adding these rules to /etc/sysctl.conf and optionally tweak them as required:
+
+   ```
+   #
+   # tweaking for improved handling DDoS
+   #
+   # Number of times SYNACKs for passive TCP connection.
+   net.ipv4.tcp_synack_retries = 2
+   
+   # Allowed local port range
+   net.ipv4.ip_local_port_range = 2000 65535
+   
+   # Protect Against TCP Time-Wait
+   net.ipv4.tcp_rfc1337 = 1
+   
+   # Decrease the time default value for tcp_fin_timeout connection
+   net.ipv4.tcp_fin_timeout = 15
+   
+   # Decrease the time default value for connections to keep alive
+   net.ipv4.tcp_keepalive_time = 300
+   net.ipv4.tcp_keepalive_probes = 5
+   net.ipv4.tcp_keepalive_intvl = 15
+   
+   # Increase the tcp-time-wait buckets pool size to prevent simple DOS attacks
+   net.ipv4.tcp_max_tw_buckets = 1440000
+   net.ipv4.tcp_tw_recycle = 1
+   net.ipv4.tcp_tw_reuse = 1
+   ```
+
+2. Finally apply them
+
+   ```
+   sysctl -p
+   ```
+
+### OpenVZ Containers
+
+When running OpenVZ container tweaking some user bean counters might be required.
+In most cases you need to observe your actual case and raise counters on exceeding
+limits when under attack. Pay special attention to these values [with some
+suggested values in parentheses]:
+
+- `numiptent` is limiting number of rules in iptables. You probably need to
+  increase this limit. (10000)
+- `numtcpsock` is controlling number of available TCP sockets (3000).
+- `tcpsndbuf` and `tcprcvbuf` are controlling memory available for buffering
+  outgoing and incoming traffic (12000000:25000000 each). Pay attention to the
+  notes given [here](http://wiki.openvz.org/UBC_secondary_parameters).
+- `kmemsize` is controlling in-kernel memory size that is required for 
+  controlling networking and filtering (50000000).
+- `privvmpages` is controlling RAM size of your VM. It isn't affected much while
+  under attack, but needs to be sufficiently high for running `rated` and all
+  other services in your VM at all.
+  
+You should observe your user bean counters quite frequently by checking the
+right-most column of output generated using this command:
+
+```
+cat /proc/user_beancounters
+```
 
 ## Inspecting Status
+
+> As stated before, `rated` is provided "as is", without warranty of any kind. Thus
+feel advised to keep an eye of what is going on.
 
 ### Count Blocked Packets
 
@@ -366,4 +436,29 @@ iptables -nvL INPUT | awk 'BEGIN {s=0} NR>2 {s+=(substr($2,length($2))=="K")?sub
 
 ```
 iptables -nL INPUT | awk 'END {print NR-2}'
+```
+
+## Known Issues
+
+### Lost firewall rules
+
+`rated` is basically keeping track of having blocked some IP for releasing the
+block later. However it tends to loose relation to some blocking rules thus
+failing to actually remove them.
+
+As a workaround 
+
+1. stop `rated`, 
+2. manually remove all leftover blocking rules
+3. restart `rated`.
+
+If you are using `iptables` for blocking IP addresses and all rules in chains
+`INPUT` and `OUTPUT` are due to running `rated` this process is as simple as 
+this:
+
+```
+sv stop rated
+iptables -F INPUT
+iptables -F OUTPUT
+sv start rated
 ```
