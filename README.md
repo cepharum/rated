@@ -84,15 +84,19 @@ provided by [Joyent](http://www.joyent.com/), the company providing NodeJS.
 #### Download ZIP
  
 1. Download [snapshot](https://github.com/cepharum/rated/archive/master.zip).
+
    ```
    cd /home/johndoe
    wget https://github.com/cepharum/rated/archive/master.zip
    ```
+
 2. Unzip it to some folder of your choice, e.g `/home/johndoe/rated`.
+
    ```
    unzip master.zip
    mv rated-master rated
    ```
+
    This would result in script being available as `/home/johndoe/rated/bin/rated.js`.
 
 #### Clone Repository
@@ -101,13 +105,17 @@ By cloning repository you might use the power of git to keep your installation
 uptodate with upcoming snapshots.
 
 1. Install `git`
+
    ```
    apt-get install git
    ```
+
 2. Clone repository
+
    ```
    git clone https://github.com/cepharum/rated
    ```
+
    This would result in script being available as `/home/johndoe/rated/bin/rated.js`.
 
 #### Adjust Configuration
@@ -127,10 +135,13 @@ Debian Wheezy includes `runit` while Ubuntu is still serving `upstart`.
 #### runit
 
 1. Install `runit`
+
    ```
    apt-get install runit
    ```
+
 2. Create service context
+
    ```
    mkdir -p /etc/sv/rated/log/main
    echo >/etc/sv/rated/run <<<EOT
@@ -142,20 +153,26 @@ Debian Wheezy includes `runit` while Ubuntu is still serving `upstart`.
    exec chpst -ulog svlogd -tt ./main
    EOT
    ```
+
    You might need to tweak pathnames to NodeJS binary and to rated.js according
    to your setup. In this example `rated` is running with `http` notifications 
    receiver.
+
 3. Enable this service
+
    ```
    cd /etc/service
    ln -s ../sv/rated rated
    ```
+
    This is enabling and instantly starting `rated` within seconds.
+
 4. Control the service
    - The service is kept running basically.
    - It's logging into file /etc/sv/rated/log/main/current. Log files are 
      rotated automatically.
    - You might check, start, stop and restart `rated` using these commands:
+
      ```
      sv stop rated
      sv start rated
