@@ -37,9 +37,11 @@ under attack keeping the website available to the public nearly all the time.
 > the server was blocking 110.000+ requests from 170 remote IP addresses having 
 > inspected about 1200 requests kept passing initially. The system is still 
 > using just 40 TCP sockets with 1.6MByte in use for TCP send/receive buffers.
-    
+>    
 > (After all this current observation isn't reflecting the heavier attacking
 >  phases though!)
+>
+> Update (2014-12-16): blocking 30921 packets from 46 IPs after running for 5 minutes
 
 Using `rated` a web server can locally reduce effects of incoming DDoS attacks.
 
